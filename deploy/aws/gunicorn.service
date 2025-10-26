@@ -1,0 +1,16 @@
+[Unit]
+Description=Legal AI Chatbot Gunicorn
+After=network.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/legal-ai-chatbot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/legal-ai-chatbot/gunicorn_start.sh
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
