@@ -8,7 +8,7 @@ import faiss
 import argparse
 from sentence_transformers import SentenceTransformer
 
-INPUT_DIR = Path("data/karnataka_acts")
+INPUT_DIR = Path("data")
 EMB_DIR = Path("embeddings")
 CHUNK_SIZE = 300
 MODEL_NAME = "all-MiniLM-L6-v2"
@@ -18,9 +18,10 @@ def ensure_dirs():
     EMB_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def extract_text_from_pdfs(input_dir: Path) -> dict:
+def extract_text_from_pdfs(input_dir: Path, recursive: bool = True) -> dict:
     text_data = {}
-    for pdf_path in sorted(input_dir.glob("*.pdf")):
+    pdf_iter = input_dir.rglob("*.pdf") if recursive else input_dir.glob("*.pdf")
+    for pdf_path in sorted(pdf_iter):
         try:
             with pdfplumber.open(str(pdf_path)) as pdf:
                 text = []
@@ -29,13 +30,14 @@ def extract_text_from_pdfs(input_dir: Path) -> dict:
                     if t:
                         text.append(t)
                 text_joined = "\n".join(text)
+                key = pdf_path.relative_to(input_dir).as_posix() if pdf_path.is_relative_to(input_dir) else pdf_path.name
                 if text_joined.strip():
-                    text_data[pdf_path.name] = text_joined
-                    print(f"Extracted: {pdf_path.name} ({len(text_joined)} chars)")
+                    text_data[key] = text_joined
+                    print(f"Extracted: {key} ({len(text_joined)} chars)")
                 else:
-                    print(f"No text in: {pdf_path.name}")
+                    print(f"No text in: {key}")
         except Exception as e:
-            print(f"Failed to read {pdf_path.name}: {e}")
+            print(f"Failed to read {pdf_path}: {e}")
     return text_data
 
 
@@ -78,10 +80,11 @@ def build_faiss_index(embeddings):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Build text, chunks, embeddings, and FAISS index")
-    parser.add_argument("--input-dir", default=str(INPUT_DIR), help="Directory containing PDFs")
+    parser.add_argument("--input-dir", default=str(INPUT_DIR), help="Directory containing PDFs (root; scans recursively)")
     parser.add_argument("--output-dir", default=str(EMB_DIR), help="Directory to save embeddings artifacts")
     parser.add_argument("--chunk-size", type=int, default=CHUNK_SIZE, help="Words per chunk")
     parser.add_argument("--model", default=MODEL_NAME, help="SentenceTransformer model name")
+    parser.add_argument("--no-recursive", action="store_true", help="Do not scan subdirectories for PDFs")
     return parser.parse_args()
 
 
@@ -97,8 +100,9 @@ def main():
 
     ensure_dirs()
 
-    print(f"Scanning PDFs in: {input_dir}")
-    text_data = extract_text_from_pdfs(input_dir)
+    recursive = not args.no_recursive
+    print(f"Scanning PDFs in: {input_dir} (recursive={recursive})")
+    text_data = extract_text_from_pdfs(input_dir, recursive=recursive)
     print(f"PDFs with text: {len(text_data)}")
 
     write_text_artifacts(text_data)
